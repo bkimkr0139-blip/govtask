@@ -1,0 +1,12 @@
+{
+  "request_id": "REQ-LLM-001",
+  "project_id": "PRJ-2026-001",
+  "task_type": "rag_answer",
+  "privacy_level": "confidential",
+  "prompt": "이 문서를 3줄로 요약해줘",
+  "context": "...",
+  "routing_strategy": "hybrid",
+  "preferred_model": null,
+  "callback_url": "http://localhost:4000/mock-callback",
+  "user_id": "user_001"
+}

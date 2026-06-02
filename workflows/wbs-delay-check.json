@@ -1,0 +1,133 @@
+﻿{
+    "name":  "[BC44·파이프라인] 06 WBS 지연 점검 (wbs-delay-check)",
+    "nodes":  [
+                  {
+                      "id":  "webhook",
+                      "name":  "Webhook",
+                      "type":  "n8n-nodes-base.webhook",
+                      "typeVersion":  2.1,
+                      "position":  [
+                                       0,
+                                       0
+                                   ],
+                      "onError":  "continueRegularOutput",
+                      "webhookId":  "bc44-wbs-delay-check",
+                      "parameters":  {
+                                         "httpMethod":  "POST",
+                                         "path":  "wbs-delay-check",
+                                         "responseMode":  "responseNode",
+                                         "options":  {
+
+                                                     }
+                                     }
+                  },
+                  {
+                      "id":  "process",
+                      "name":  "Process \u0026 Build Callback",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       240,
+                                       0
+                                   ],
+                      "onError":  "continueRegularOutput",
+                      "parameters":  {
+                                         "language":  "javaScript",
+                                         "jsCode":  "// === [BC44 Pipeline] WBS Delay Check (real logic) ===\nconst WORKFLOW_TYPE = \u0027wbs_delay_check\u0027;\nconst input = $input.first().json;\nconst headers = input.headers || {};\nconst body = input.body || {};\nconst expectedToken = $env.N8N_WEBHOOK_TOKEN || \u0027dev-local-token\u0027;\nconst callbackToken = $env.BASE44_CALLBACK_TOKEN || \u0027dev-callback-token\u0027;\nconst request_id  = body.request_id || headers[\u0027x-request-id\u0027] || null;\nconst project_id  = body.project_id || headers[\u0027x-project-id\u0027] || null;\nconst user_id     = body.user_id    || headers[\u0027x-user-id\u0027]    || null;\nconst callback_url = body.callback_url || $env.BASE44_CALLBACK_URL || \u0027http://localhost:4000/mock-callback\u0027;\nconst execId = (typeof $execution !== \u0027undefined\u0027 \u0026\u0026 $execution.id) ? String($execution.id) : \u0027manual\u0027;\nfunction envelope(status, progress, result, error) { return [{ json: { callback_url, callback_token: callbackToken, payload: { request_id, workflow_type: WORKFLOW_TYPE, project_id, status, progress, result, error, n8n_execution_id: execId } } }]; }\nfunction fail(code, node, message, details) { return envelope(\u0027failed\u0027, 0, null, { message, node, code, details: details || {} }); }\nlet step = \u0027Validate Token\u0027;\ntry {\n  const auth = headers[\u0027authorization\u0027] || headers[\u0027Authorization\u0027] || \u0027\u0027;\n  const token = String(auth).replace(/^Bearer\\s+/i, \u0027\u0027).trim();\n  if (!token || token !== expectedToken) return fail(\u0027AUTH_ERROR\u0027, step, \u0027Invalid or missing bearer token\u0027);\n  step = \u0027Validate Payload\u0027;\n  const missing = [];\n  if (!request_id) missing.push(\u0027request_id\u0027);\n  if (!project_id) missing.push(\u0027project_id\u0027);\n  if (!user_id) missing.push(\u0027user_id\u0027);\n  if (!Array.isArray(body.wbs_items)) missing.push(\u0027wbs_items\u0027);\n  if (missing.length) return fail(\u0027VALIDATION_ERROR\u0027, step, \u0027Missing required fields: \u0027 + missing.join(\u0027, \u0027), { missing });\n  step = \u0027Detect Delay\u0027;\n  const items = body.wbs_items;\n  const existing = Array.isArray(body.existing_open_issues) ? body.existing_open_issues : [];\n  const existingSet = {};\n  existing.forEach(function(i){ if (i \u0026\u0026 i.wbs_id) existingSet[i.wbs_id] = true; });\n  const today = (typeof $now !== \u0027undefined\u0027) ? $now.startOf(\u0027day\u0027) : DateTime.now().startOf(\u0027day\u0027);\n  const issues_to_create = [];\n  for (const w of items) {\n    if (!w || !w.due_date) continue;\n    const due = DateTime.fromISO(w.due_date).startOf(\u0027day\u0027);\n    const progress = (w.progress != null) ? w.progress : 0;\n    if (!(today \u003e due \u0026\u0026 progress \u003c 100)) continue;\n    if (existingSet[w.id]) continue;\n    const delay_days = Math.floor(today.diff(due, \u0027days\u0027).days);\n    let severity = \u0027low\u0027;\n    if (delay_days \u003e= 14) severity = \u0027critical\u0027; else if (delay_days \u003e= 7) severity = \u0027high\u0027; else if (delay_days \u003e= 3) severity = \u0027medium\u0027;\n    issues_to_create.push({ project_id: project_id, wbs_id: w.id, title: \u0027WBS 지연: \u0027 + (w.title || w.id), description: \u0027마감일이 \u0027 + delay_days + \u0027일 지났고 완료율은 \u0027 + progress + \u0027%입니다.\u0027, source: \u0027auto_wbs\u0027, severity: severity, status: \u0027open\u0027, assignee_id: w.assignee_id || null, auto_rule_id: \u0027RULE-WBS-DELAY-001\u0027, delay_days: delay_days });\n  }\n  const result = { issues_to_create: issues_to_create, issues_to_update: [], evaluated: items.length };\n  return envelope(\u0027success\u0027, 100, result, null);\n} catch (e) { return fail(\u0027INTERNAL_ERROR\u0027, step, (e \u0026\u0026 e.message) ? e.message : String(e)); }"
+                                     }
+                  },
+                  {
+                      "id":  "callback",
+                      "name":  "Send Callback",
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.4,
+                      "position":  [
+                                       480,
+                                       0
+                                   ],
+                      "onError":  "continueRegularOutput",
+                      "alwaysOutputData":  true,
+                      "parameters":  {
+                                         "method":  "POST",
+                                         "url":  "={{ $json.callback_url }}",
+                                         "sendHeaders":  true,
+                                         "headerParameters":  {
+                                                                  "parameters":  [
+                                                                                     {
+                                                                                         "name":  "Authorization",
+                                                                                         "value":  "={{ \u0027Bearer \u0027 + $json.callback_token }}"
+                                                                                     },
+                                                                                     {
+                                                                                         "name":  "Content-Type",
+                                                                                         "value":  "application/json"
+                                                                                     }
+                                                                                 ]
+                                                              },
+                                         "sendBody":  true,
+                                         "specifyBody":  "json",
+                                         "jsonBody":  "={{ JSON.stringify($json.payload) }}",
+                                         "options":  {
+
+                                                     }
+                                     }
+                  },
+                  {
+                      "id":  "respond",
+                      "name":  "Respond",
+                      "type":  "n8n-nodes-base.respondToWebhook",
+                      "typeVersion":  1.5,
+                      "position":  [
+                                       720,
+                                       0
+                                   ],
+                      "parameters":  {
+                                         "respondWith":  "json",
+                                         "responseBody":  "={{ $(\u0027Process \u0026 Build Callback\u0027).item.json.payload }}",
+                                         "options":  {
+                                                         "responseCode":  200
+                                                     }
+                                     }
+                  }
+              ],
+    "connections":  {
+                        "Webhook":  {
+                                        "main":  [
+                                                     [
+                                                         {
+                                                             "node":  "Process \u0026 Build Callback",
+                                                             "type":  "main",
+                                                             "index":  0
+                                                         }
+                                                     ]
+                                                 ]
+                                    },
+                        "Process \u0026 Build Callback":  {
+                                                              "main":  [
+                                                                           [
+                                                                               {
+                                                                                   "node":  "Send Callback",
+                                                                                   "type":  "main",
+                                                                                   "index":  0
+                                                                               }
+                                                                           ]
+                                                                       ]
+                                                          },
+                        "Send Callback":  {
+                                              "main":  [
+                                                           [
+                                                               {
+                                                                   "node":  "Respond",
+                                                                   "type":  "main",
+                                                                   "index":  0
+                                                               }
+                                                           ]
+                                                       ]
+                                          }
+                    },
+    "settings":  {
+                     "executionOrder":  "v1",
+                     "timezone":  "Asia/Seoul",
+                     "saveDataErrorExecution":  "all",
+                     "saveDataSuccessExecution":  "all"
+                 }
+}

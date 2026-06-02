@@ -1,0 +1,133 @@
+﻿{
+    "name":  "[BC44·파이프라인] 07 LLM 라우팅 (llm-route)",
+    "nodes":  [
+                  {
+                      "id":  "webhook",
+                      "name":  "Webhook",
+                      "type":  "n8n-nodes-base.webhook",
+                      "typeVersion":  2.1,
+                      "position":  [
+                                       0,
+                                       0
+                                   ],
+                      "onError":  "continueRegularOutput",
+                      "webhookId":  "bc44-llm-route",
+                      "parameters":  {
+                                         "httpMethod":  "POST",
+                                         "path":  "llm-route",
+                                         "responseMode":  "responseNode",
+                                         "options":  {
+
+                                                     }
+                                     }
+                  },
+                  {
+                      "id":  "process",
+                      "name":  "Process \u0026 Build Callback",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       240,
+                                       0
+                                   ],
+                      "onError":  "continueRegularOutput",
+                      "parameters":  {
+                                         "language":  "javaScript",
+                                         "jsCode":  "// === [BC44 Pipeline] LLM Route (mock + real policy) ===\nconst WORKFLOW_TYPE = \u0027llm_route\u0027;\nconst PIPELINE_MODE = $env.PIPELINE_MODE || \u0027mock\u0027;\nconst input = $input.first().json;\nconst headers = input.headers || {};\nconst body = input.body || {};\nconst expectedToken = $env.N8N_WEBHOOK_TOKEN || \u0027dev-local-token\u0027;\nconst callbackToken = $env.BASE44_CALLBACK_TOKEN || \u0027dev-callback-token\u0027;\nconst request_id  = body.request_id || headers[\u0027x-request-id\u0027] || null;\nconst project_id  = body.project_id || headers[\u0027x-project-id\u0027] || null;\nconst callback_url = body.callback_url || $env.BASE44_CALLBACK_URL || \u0027http://localhost:4000/mock-callback\u0027;\nconst execId = (typeof $execution !== \u0027undefined\u0027 \u0026\u0026 $execution.id) ? String($execution.id) : \u0027manual\u0027;\nfunction envelope(status, progress, result, error) { return [{ json: { callback_url, callback_token: callbackToken, payload: { request_id, workflow_type: WORKFLOW_TYPE, project_id, status, progress, result, error, n8n_execution_id: execId } } }]; }\nfunction fail(code, node, message, details) { return envelope(\u0027failed\u0027, 0, null, { message, node, code, details: details || {} }); }\nlet step = \u0027Validate Token\u0027;\ntry {\n  const auth = headers[\u0027authorization\u0027] || headers[\u0027Authorization\u0027] || \u0027\u0027;\n  const token = String(auth).replace(/^Bearer\\s+/i, \u0027\u0027).trim();\n  if (!token || token !== expectedToken) return fail(\u0027AUTH_ERROR\u0027, step, \u0027Invalid or missing bearer token\u0027);\n  step = \u0027Validate Payload\u0027;\n  const missing = [];\n  if (!request_id) missing.push(\u0027request_id\u0027);\n  if (!project_id) missing.push(\u0027project_id\u0027);\n  if (!body.prompt) missing.push(\u0027prompt\u0027);\n  if (missing.length) return fail(\u0027VALIDATION_ERROR\u0027, step, \u0027Missing required fields: \u0027 + missing.join(\u0027, \u0027), { missing });\n  step = \u0027Select Provider\u0027;\n  const privacy = body.privacy_level || \u0027normal\u0027;\n  const strategy = body.routing_strategy || ((($env.DEFAULT_LLM_PROVIDER) === \u0027local\u0027) ? \u0027local_first\u0027 : \u0027external_primary\u0027);\n  const task = body.task_type || \u0027generic\u0027;\n  const LOCAL_MODEL = $env.LOCAL_SLLM_MODEL || \u0027qwen2.5:14b\u0027;\n  let provider, model, policy_note = \u0027\u0027;\n  if (privacy === \u0027confidential\u0027 || strategy === \u0027privacy_strict\u0027) { provider = \u0027local_sllm\u0027; model = LOCAL_MODEL; policy_note = \u0027confidential/privacy_strict -\u003e local only\u0027; }\n  else if (strategy === \u0027local_first\u0027) { provider = \u0027local_sllm\u0027; model = LOCAL_MODEL; }\n  else if (strategy === \u0027external_primary\u0027) { provider = \u0027external\u0027; model = \u0027gpt-4.1\u0027; }\n  else { if (task === \u0027evaluation\u0027 || task === \u0027report\u0027) { provider = \u0027external\u0027; model = \u0027gpt-4.1\u0027; } else { provider = \u0027local_sllm\u0027; model = LOCAL_MODEL; } policy_note = \u0027hybrid\u0027; }\n  if (body.preferred_model) model = body.preferred_model;\n  if (privacy === \u0027confidential\u0027 \u0026\u0026 provider === \u0027external\u0027) { return fail(\u0027POLICY_VIOLATION\u0027, \u0027Select Provider\u0027, \u0027confidential document cannot be sent to external LLM\u0027); }\n  if (PIPELINE_MODE === \u0027live\u0027) { return fail(\u0027INTERNAL_ERROR\u0027, \u0027Call Model\u0027, \u0027live mode not yet wired - set PIPELINE_MODE=mock\u0027); }\n  step = \u0027Call Model\u0027;\n  const result = { provider: provider, model_used: model, output: \u0027[MOCK] LLM(\u0027 + provider + \u0027) 응답 텍스트\u0027, routing_strategy: strategy, privacy_level: privacy, fallback_used: false, latency_ms: 120, token_usage: { input_tokens: 800, output_tokens: 240 }, cost_estimate: (provider === \u0027external\u0027) ? 0.012 : 0.0, policy_note: policy_note, mode: \u0027mock\u0027 };\n  return envelope(\u0027success\u0027, 100, result, null);\n} catch (e) { return fail(\u0027INTERNAL_ERROR\u0027, step, (e \u0026\u0026 e.message) ? e.message : String(e)); }"
+                                     }
+                  },
+                  {
+                      "id":  "callback",
+                      "name":  "Send Callback",
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.4,
+                      "position":  [
+                                       480,
+                                       0
+                                   ],
+                      "onError":  "continueRegularOutput",
+                      "alwaysOutputData":  true,
+                      "parameters":  {
+                                         "method":  "POST",
+                                         "url":  "={{ $json.callback_url }}",
+                                         "sendHeaders":  true,
+                                         "headerParameters":  {
+                                                                  "parameters":  [
+                                                                                     {
+                                                                                         "name":  "Authorization",
+                                                                                         "value":  "={{ \u0027Bearer \u0027 + $json.callback_token }}"
+                                                                                     },
+                                                                                     {
+                                                                                         "name":  "Content-Type",
+                                                                                         "value":  "application/json"
+                                                                                     }
+                                                                                 ]
+                                                              },
+                                         "sendBody":  true,
+                                         "specifyBody":  "json",
+                                         "jsonBody":  "={{ JSON.stringify($json.payload) }}",
+                                         "options":  {
+
+                                                     }
+                                     }
+                  },
+                  {
+                      "id":  "respond",
+                      "name":  "Respond",
+                      "type":  "n8n-nodes-base.respondToWebhook",
+                      "typeVersion":  1.5,
+                      "position":  [
+                                       720,
+                                       0
+                                   ],
+                      "parameters":  {
+                                         "respondWith":  "json",
+                                         "responseBody":  "={{ $(\u0027Process \u0026 Build Callback\u0027).item.json.payload }}",
+                                         "options":  {
+                                                         "responseCode":  200
+                                                     }
+                                     }
+                  }
+              ],
+    "connections":  {
+                        "Webhook":  {
+                                        "main":  [
+                                                     [
+                                                         {
+                                                             "node":  "Process \u0026 Build Callback",
+                                                             "type":  "main",
+                                                             "index":  0
+                                                         }
+                                                     ]
+                                                 ]
+                                    },
+                        "Process \u0026 Build Callback":  {
+                                                              "main":  [
+                                                                           [
+                                                                               {
+                                                                                   "node":  "Send Callback",
+                                                                                   "type":  "main",
+                                                                                   "index":  0
+                                                                               }
+                                                                           ]
+                                                                       ]
+                                                          },
+                        "Send Callback":  {
+                                              "main":  [
+                                                           [
+                                                               {
+                                                                   "node":  "Respond",
+                                                                   "type":  "main",
+                                                                   "index":  0
+                                                               }
+                                                           ]
+                                                       ]
+                                          }
+                    },
+    "settings":  {
+                     "executionOrder":  "v1",
+                     "timezone":  "Asia/Seoul",
+                     "saveDataErrorExecution":  "all",
+                     "saveDataSuccessExecution":  "all"
+                 }
+}

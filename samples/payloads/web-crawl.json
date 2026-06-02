@@ -1,0 +1,10 @@
+{
+  "request_id": "REQ-CRAWL-001",
+  "project_id": "PRJ-2026-001",
+  "urls": ["https://example.go.kr/notice"],
+  "crawl_depth": 1,
+  "allowed_domains": ["example.go.kr"],
+  "include_pdf_links": true,
+  "callback_url": "http://localhost:4000/mock-callback",
+  "user_id": "user_001"
+}

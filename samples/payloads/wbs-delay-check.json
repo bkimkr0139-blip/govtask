@@ -1,0 +1,25 @@
+{
+  "request_id": "REQ-WBS-001",
+  "project_id": "PRJ-2026-001",
+  "wbs_items": [
+    {
+      "id": "WBS-001",
+      "title": "RFP 분석",
+      "assignee_id": "user_002",
+      "due_date": "2026-05-20",
+      "progress": 60,
+      "status": "in_progress"
+    },
+    {
+      "id": "WBS-002",
+      "title": "착수보고",
+      "assignee_id": "user_003",
+      "due_date": "2026-07-01",
+      "progress": 10,
+      "status": "in_progress"
+    }
+  ],
+  "existing_open_issues": [],
+  "callback_url": "http://localhost:4000/mock-callback",
+  "user_id": "user_001"
+}

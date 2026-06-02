@@ -1,0 +1,87 @@
+﻿{
+    "name":  "[BC44·파이프라인] 10 헬스체크 (health)",
+    "nodes":  [
+                  {
+                      "id":  "webhook",
+                      "name":  "Webhook",
+                      "type":  "n8n-nodes-base.webhook",
+                      "typeVersion":  2.1,
+                      "position":  [
+                                       0,
+                                       0
+                                   ],
+                      "onError":  "continueRegularOutput",
+                      "webhookId":  "bc44-health",
+                      "parameters":  {
+                                         "httpMethod":  "GET",
+                                         "path":  "health",
+                                         "responseMode":  "responseNode",
+                                         "options":  {
+
+                                                     }
+                                     }
+                  },
+                  {
+                      "id":  "health",
+                      "name":  "Health",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       240,
+                                       0
+                                   ],
+                      "onError":  "continueRegularOutput",
+                      "parameters":  {
+                                         "language":  "javaScript",
+                                         "jsCode":  "// === [BC44 Pipeline] Health Check ===\nconst t = (typeof $now !== \u0027undefined\u0027) ? $now.toISO() : null;\nconst checks = {\n  n8n: { status: \u0027ok\u0027 },\n  pipeline_mode: $env.PIPELINE_MODE || \u0027mock\u0027,\n  webhook_token_configured: !!$env.N8N_WEBHOOK_TOKEN,\n  callback_url: $env.BASE44_CALLBACK_URL || \u0027http://localhost:4000/mock-callback\u0027,\n  qdrant: { status: $env.QDRANT_URL ? \u0027configured\u0027 : \u0027not_configured\u0027, url: $env.QDRANT_URL || null },\n  mcp_gateway: { status: $env.MCP_GATEWAY_URL ? \u0027configured\u0027 : \u0027not_configured\u0027, url: $env.MCP_GATEWAY_URL || null },\n  local_sllm: { status: $env.LOCAL_SLLM_BASE_URL ? \u0027configured\u0027 : \u0027not_configured\u0027, model: $env.LOCAL_SLLM_MODEL || null }\n};\nreturn [{ json: { status: \u0027ok\u0027, service: \u0027bc44-n8n-pipeline\u0027, version: \u0027v1\u0027, time: t, checks: checks } }];"
+                                     }
+                  },
+                  {
+                      "id":  "respond",
+                      "name":  "Respond",
+                      "type":  "n8n-nodes-base.respondToWebhook",
+                      "typeVersion":  1.5,
+                      "position":  [
+                                       480,
+                                       0
+                                   ],
+                      "parameters":  {
+                                         "respondWith":  "json",
+                                         "responseBody":  "={{ $(\u0027Health\u0027).item.json }}",
+                                         "options":  {
+                                                         "responseCode":  200
+                                                     }
+                                     }
+                  }
+              ],
+    "connections":  {
+                        "Webhook":  {
+                                        "main":  [
+                                                     [
+                                                         {
+                                                             "node":  "Health",
+                                                             "type":  "main",
+                                                             "index":  0
+                                                         }
+                                                     ]
+                                                 ]
+                                    },
+                        "Health":  {
+                                       "main":  [
+                                                    [
+                                                        {
+                                                            "node":  "Respond",
+                                                            "type":  "main",
+                                                            "index":  0
+                                                        }
+                                                    ]
+                                                ]
+                                   }
+                    },
+    "settings":  {
+                     "executionOrder":  "v1",
+                     "timezone":  "Asia/Seoul",
+                     "saveDataErrorExecution":  "all",
+                     "saveDataSuccessExecution":  "all"
+                 }
+}

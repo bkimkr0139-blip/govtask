@@ -1,0 +1,11 @@
+{
+  "request_id": "REQ-RAG-001",
+  "project_id": "PRJ-2026-001",
+  "session_id": "CHAT-001",
+  "question": "이 RFP의 핵심 요구사항은?",
+  "document_filter": ["DOC-001"],
+  "top_k": 8,
+  "response_style": "business_report",
+  "callback_url": "http://localhost:4000/mock-callback",
+  "user_id": "user_001"
+}

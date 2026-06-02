@@ -1,0 +1,8 @@
+{
+  "request_id": "REQ-EVAL-001",
+  "project_id": "PRJ-2026-001",
+  "rfp_document_ids": ["DOC-001"],
+  "proposal_document_ids": ["DOC-PROP-001"],
+  "callback_url": "http://localhost:4000/mock-callback",
+  "user_id": "user_001"
+}

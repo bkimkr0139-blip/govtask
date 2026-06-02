@@ -1,0 +1,80 @@
+# =====================================================================
+# Base44 <-> n8n AI 파이프라인 — Docker Compose (선택/대안 스택)
+# ---------------------------------------------------------------------
+# 주의: 현재 운영 n8n은 로컬 native(localhost:5678, v2.56.0)로 가동 중이며
+#       이번 파이프라인 워크플로우는 그 인스턴스에 MCP로 배포되어 있다.
+#       이 compose 파일은 (1) 깨끗한 격리 스택을 새로 띄우거나
+#       (2) 다른 PC/서버로 이식할 때 사용하는 대안 구성이다.
+#       native n8n과 동시에 띄우면 5678 포트가 충돌하므로 포트를 바꾸거나
+#       native 인스턴스를 내린 뒤 사용할 것.
+# =====================================================================
+version: "3.9"
+
+services:
+  n8n:
+    image: n8nio/n8n:latest
+    restart: unless-stopped
+    ports:
+      - "5679:5678"            # native(5678) 충돌 회피용으로 5679 매핑
+    environment:
+      - N8N_HOST=${N8N_HOST:-localhost}
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=${N8N_PROTOCOL:-http}
+      - WEBHOOK_URL=${N8N_BASE_URL:-http://localhost:5679/}
+      - N8N_BASIC_AUTH_ACTIVE=${N8N_BASIC_AUTH_ACTIVE:-false}
+      - N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER:-admin}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD:-change-me}
+      - N8N_BLOCK_ENV_ACCESS_IN_NODE=false
+      - GENERIC_TIMEZONE=${GENERIC_TIMEZONE:-Asia/Seoul}
+      # workflow Code 노드가 참조하는 파이프라인 변수
+      - N8N_WEBHOOK_TOKEN=${N8N_WEBHOOK_TOKEN:-dev-local-token}
+      - BASE44_CALLBACK_URL=${BASE44_CALLBACK_URL:-http://mock-callback:4000/mock-callback}
+      - BASE44_CALLBACK_TOKEN=${BASE44_CALLBACK_TOKEN:-dev-callback-token}
+      - QDRANT_URL=${QDRANT_URL:-http://qdrant:6333}
+      - MCP_GATEWAY_URL=${MCP_GATEWAY_URL:-http://mcp-gateway:8088}
+      - LOCAL_SLLM_BASE_URL=${LOCAL_SLLM_BASE_URL:-http://host.docker.internal:11434/v1}
+      - PIPELINE_MODE=${PIPELINE_MODE:-mock}
+    volumes:
+      - ./n8n/data:/home/node/.n8n
+      - ./storage:/storage
+      - ./workflows:/workflows:ro          # JSON export import 소스
+    extra_hosts:
+      - "host.docker.internal:host-gateway" # 호스트의 ollama 등 접근
+    depends_on:
+      - qdrant
+      - mock-callback
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - ./qdrant/storage:/qdrant/storage
+
+  # Base44가 아직 없을 때 callback을 받아 콘솔/파일에 남기는 모의 수신기
+  mock-callback:
+    image: node:20-alpine
+    restart: unless-stopped
+    working_dir: /app
+    command: ["node", "mock_callback_server.cjs"]
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./mock:/app
+      - ./storage/logs:/app/logs
+
+  # MCP Gateway — 미구현 스텁. 실제 구현 전까지 비활성(profile)로 둔다.
+  mcp-gateway:
+    build: ./services/mcp-gateway
+    restart: unless-stopped
+    profiles: ["full"]            # `docker compose --profile full up` 일 때만 기동
+    ports:
+      - "8088:8088"
+    environment:
+      - QDRANT_URL=http://qdrant:6333
+      - INTERNAL_API_TOKEN=${INTERNAL_API_TOKEN:-dev-internal-token}
+      - LOCAL_SLLM_BASE_URL=${LOCAL_SLLM_BASE_URL:-http://host.docker.internal:11434/v1}
+    depends_on:
+      - qdrant

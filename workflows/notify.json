@@ -1,0 +1,133 @@
+﻿{
+    "name":  "[BC44·파이프라인] 08 알림 (notify)",
+    "nodes":  [
+                  {
+                      "id":  "webhook",
+                      "name":  "Webhook",
+                      "type":  "n8n-nodes-base.webhook",
+                      "typeVersion":  2.1,
+                      "position":  [
+                                       0,
+                                       0
+                                   ],
+                      "onError":  "continueRegularOutput",
+                      "webhookId":  "bc44-notify",
+                      "parameters":  {
+                                         "httpMethod":  "POST",
+                                         "path":  "notify",
+                                         "responseMode":  "responseNode",
+                                         "options":  {
+
+                                                     }
+                                     }
+                  },
+                  {
+                      "id":  "process",
+                      "name":  "Process \u0026 Build Callback",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       240,
+                                       0
+                                   ],
+                      "onError":  "continueRegularOutput",
+                      "parameters":  {
+                                         "language":  "javaScript",
+                                         "jsCode":  "// === [BC44 Pipeline] Notification (mock) ===\nconst WORKFLOW_TYPE = \u0027notification\u0027;\nconst PIPELINE_MODE = $env.PIPELINE_MODE || \u0027mock\u0027;\nconst input = $input.first().json;\nconst headers = input.headers || {};\nconst body = input.body || {};\nconst expectedToken = $env.N8N_WEBHOOK_TOKEN || \u0027dev-local-token\u0027;\nconst callbackToken = $env.BASE44_CALLBACK_TOKEN || \u0027dev-callback-token\u0027;\nconst request_id  = body.request_id || headers[\u0027x-request-id\u0027] || null;\nconst project_id  = body.project_id || headers[\u0027x-project-id\u0027] || null;\nconst user_id     = body.user_id    || headers[\u0027x-user-id\u0027]    || null;\nconst callback_url = body.callback_url || $env.BASE44_CALLBACK_URL || \u0027http://localhost:4000/mock-callback\u0027;\nconst execId = (typeof $execution !== \u0027undefined\u0027 \u0026\u0026 $execution.id) ? String($execution.id) : \u0027manual\u0027;\nfunction envelope(status, progress, result, error) { return [{ json: { callback_url, callback_token: callbackToken, payload: { request_id, workflow_type: WORKFLOW_TYPE, project_id, status, progress, result, error, n8n_execution_id: execId } } }]; }\nfunction fail(code, node, message, details) { return envelope(\u0027failed\u0027, 0, null, { message, node, code, details: details || {} }); }\nlet step = \u0027Validate Token\u0027;\ntry {\n  const auth = headers[\u0027authorization\u0027] || headers[\u0027Authorization\u0027] || \u0027\u0027;\n  const token = String(auth).replace(/^Bearer\\s+/i, \u0027\u0027).trim();\n  if (!token || token !== expectedToken) return fail(\u0027AUTH_ERROR\u0027, step, \u0027Invalid or missing bearer token\u0027);\n  step = \u0027Validate Payload\u0027;\n  const missing = [];\n  if (!request_id) missing.push(\u0027request_id\u0027);\n  if (!project_id) missing.push(\u0027project_id\u0027);\n  if (!user_id) missing.push(\u0027user_id\u0027);\n  if (!body.message) missing.push(\u0027message\u0027);\n  if (missing.length) return fail(\u0027VALIDATION_ERROR\u0027, step, \u0027Missing required fields: \u0027 + missing.join(\u0027, \u0027), { missing });\n  if (PIPELINE_MODE === \u0027live\u0027) { return fail(\u0027INTERNAL_ERROR\u0027, \u0027Send Notification\u0027, \u0027live mode not yet wired - set PIPELINE_MODE=mock\u0027); }\n  step = \u0027Send Notification\u0027;\n  const result = { delivered: true, channel: body.channel || \u0027telegram\u0027, message_id: \u0027MSG-MOCK-\u0027 + execId, mode: \u0027mock\u0027 };\n  return envelope(\u0027success\u0027, 100, result, null);\n} catch (e) { return fail(\u0027INTERNAL_ERROR\u0027, step, (e \u0026\u0026 e.message) ? e.message : String(e)); }"
+                                     }
+                  },
+                  {
+                      "id":  "callback",
+                      "name":  "Send Callback",
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.4,
+                      "position":  [
+                                       480,
+                                       0
+                                   ],
+                      "onError":  "continueRegularOutput",
+                      "alwaysOutputData":  true,
+                      "parameters":  {
+                                         "method":  "POST",
+                                         "url":  "={{ $json.callback_url }}",
+                                         "sendHeaders":  true,
+                                         "headerParameters":  {
+                                                                  "parameters":  [
+                                                                                     {
+                                                                                         "name":  "Authorization",
+                                                                                         "value":  "={{ \u0027Bearer \u0027 + $json.callback_token }}"
+                                                                                     },
+                                                                                     {
+                                                                                         "name":  "Content-Type",
+                                                                                         "value":  "application/json"
+                                                                                     }
+                                                                                 ]
+                                                              },
+                                         "sendBody":  true,
+                                         "specifyBody":  "json",
+                                         "jsonBody":  "={{ JSON.stringify($json.payload) }}",
+                                         "options":  {
+
+                                                     }
+                                     }
+                  },
+                  {
+                      "id":  "respond",
+                      "name":  "Respond",
+                      "type":  "n8n-nodes-base.respondToWebhook",
+                      "typeVersion":  1.5,
+                      "position":  [
+                                       720,
+                                       0
+                                   ],
+                      "parameters":  {
+                                         "respondWith":  "json",
+                                         "responseBody":  "={{ $(\u0027Process \u0026 Build Callback\u0027).item.json.payload }}",
+                                         "options":  {
+                                                         "responseCode":  200
+                                                     }
+                                     }
+                  }
+              ],
+    "connections":  {
+                        "Webhook":  {
+                                        "main":  [
+                                                     [
+                                                         {
+                                                             "node":  "Process \u0026 Build Callback",
+                                                             "type":  "main",
+                                                             "index":  0
+                                                         }
+                                                     ]
+                                                 ]
+                                    },
+                        "Process \u0026 Build Callback":  {
+                                                              "main":  [
+                                                                           [
+                                                                               {
+                                                                                   "node":  "Send Callback",
+                                                                                   "type":  "main",
+                                                                                   "index":  0
+                                                                               }
+                                                                           ]
+                                                                       ]
+                                                          },
+                        "Send Callback":  {
+                                              "main":  [
+                                                           [
+                                                               {
+                                                                   "node":  "Respond",
+                                                                   "type":  "main",
+                                                                   "index":  0
+                                                               }
+                                                           ]
+                                                       ]
+                                          }
+                    },
+    "settings":  {
+                     "executionOrder":  "v1",
+                     "timezone":  "Asia/Seoul",
+                     "saveDataErrorExecution":  "all",
+                     "saveDataSuccessExecution":  "all"
+                 }
+}

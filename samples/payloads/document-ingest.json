@@ -1,0 +1,10 @@
+{
+  "request_id": "REQ-DOC-001",
+  "project_id": "PRJ-2026-001",
+  "document_id": "DOC-001",
+  "file_name": "RFP.pdf",
+  "file_url": "https://example.com/RFP.pdf",
+  "file_type": "pdf",
+  "callback_url": "http://localhost:4000/mock-callback",
+  "user_id": "user_001"
+}
